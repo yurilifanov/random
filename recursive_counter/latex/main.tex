@@ -1,0 +1,37 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{amssymb} %\mathbb
+
+\begin{document}
+  \title{Useful Sums}
+  \author{Y. Lifanov}
+  \date{\today}
+  \maketitle
+
+  For $n,m\in\mathbb{Z} \:: 0\leq m\leq n$,
+  \begin{equation}
+    \begin{aligned}
+      \sum_{i = 0}^m\sum_{j = 0}^n\min\{i, j\} 
+      &= 
+      \sum_{i = 0}^m\sum_{j = 0}^i j + 
+      \sum_{i = 0}^m\sum_{j = i + 1}^n i \\
+      &= 
+      \frac{1}{2}\sum_{i = 0}^m i(i + 1) + 
+      \sum_{i = 0}^m i(n - i) \\
+      &= 
+      \left(n + \frac{1}{2}\right)\sum_{i = 0}^m i - 
+      \frac{1}{2}\sum_{i = 0}^m i^2 \\
+      &=
+      \frac{1}{6}m(m + 1)\left(3n - m + 1\right).
+    \end{aligned}
+  \end{equation}
+
+  For $n,m\in\mathbb{Z} \:: 0\leq m\leq n$ and $x\in\mathbb{Z}$,
+  \begin{equation}
+    \begin{aligned}
+      \sum_{i = 0}^m\sum_{j = 0}^n\max\{0, i + j - x\} 
+      &= 
+      \dots
+    \end{aligned}
+  \end{equation}
+\end{document}
