@@ -1,13 +1,10 @@
+import subprocess
 import numpy as np
 from sympy import *
 from itertools import chain
 from sympy.assumptions import assuming, Q
 
 n, m, c = symbols('n m c', real=False)
-
-# n, m and c are positive integers
-assumptions = [(Q.integer(x), Q.positive(x)) for x in [n, m, c]]
-assumptions = list(chain.from_iterable(assumptions))
 
 def composition(n, k):
   '''
@@ -18,23 +15,17 @@ def composition(n, k):
   '''
   return binomial(n - Integer(1), k - Integer(1))
 
-with assuming(*assumptions):
-  # the full equation
-  fun = composition(n - m, c) * (composition(m, c - Integer(1)) \
-        + Integer(2) * composition(m, c) + composition(m, c + Integer(1)))
-
-  # fetch the simplified formula
-  fun = simplify(fun)
-
-  # print for use in cpp
-  print(fun)
+formula = composition(n - m, c) * (composition(m, c - Integer(1)) \
+          + Integer(2) * composition(m, c) + composition(m, c + Integer(1)))
 
 def analytical_formula(N, M, C):
   '''
     Returns the output of the simplified sympy formula,
     converted to integer
   '''
-  return int(fun.evalf(subs={n: N, m: M, c: C}))
+  if (N - M) == 0:
+    return 1 if C == 0 else 0
+  return int(formula.evalf(subs={n: N, m: M, c: C}))
 
 def simulation(N, M, C):
   '''
@@ -49,9 +40,18 @@ def simulation(N, M, C):
   num_conn_comp = diff.sum(axis=1)
   return (num_conn_comp == C).sum()
 
-def comparison(N, M, C):
+def process_file(file_path):
   '''
-    Returns both the analytical and the brute force results
-    as tuple
+    Runs simulations for each test case in input file
   '''
-  return analytical_formula(N, M, C), simulation(N, M, C)
+  x = np.fromfile(file_path, dtype=int, sep=' ')[1:].reshape(-1, 3)
+  return [(simulation(*y), analytical_formula(*y)) for y in x.tolist()]
+
+if __name__ == '__main__':
+  file_path = './data/input.txt'
+  test = np.array(process_file(file_path))
+  run_str = './a.out < {}'.format(file_path)
+  cpp_test = subprocess.check_output(run_str, shell=True)
+  cpp_test = np.fromstring(cpp_test, dtype=int, sep='\n')
+  assert (test[:, 0] == test[:, 1]).all(), 'Test failed'
+  assert (test[:, 0] == cpp_test).all(), 'Cpp test Failed'
