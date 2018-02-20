@@ -1,3 +1,9 @@
+/** Check out: 
+ *    - https://en.wikipedia.org/wiki/Euler%27s_theorem
+ *    - https://en.wikipedia.org/wiki/Lucas%27s_theorem#Consequence
+ *    - https://en.wikipedia.org/wiki/Chinese_remainder_theorem#Existence_(constructive_proof)
+ */
+
 #include <string>         // std::string
 #include <cctype>         // isdigit
 #include <vector>         // std::vector
@@ -5,63 +11,93 @@
 #include <cstdint>        // uint32_t
 #include <iostream>       // std::cout
 #include <exception>      // std::runtime_error
-#include <type_traits>    // std::is_unsigned
+#include <type_traits>    // std::is_unsigned, std::is_integral
 
 using value_type = uint32_t;
 static_assert(std::is_unsigned<value_type>(), "Value type is signed!");
 
 /** Simple check for whether input integer x is a prime.
  */ 
-constexpr bool is_prime(value_type x) {
+template <typename type>
+constexpr bool IS_PRIME(type x) {
+
+  static_assert(std::is_unsigned<type>() & std::is_integral<type>(), 
+                "is_prime supports only unsigned integral types.");
+
   if ((x < 2) || (x % 2 == 0)) {
     return x == 2; 
   }
+
   for (value_type i = 3; (i * i) <= x; i += 2) {
     if (x % i == 0) {
       return false;
     }
   }
+
   return true;
 }
 
-/** Recursive routine computing the binomial coefficient
- *  modulo some integer.
- */ 
-constexpr value_type recursive_binomial(
-  value_type n, 
-  value_type k, 
-  value_type modulo
-) {
+/** From Lucas's theorem:
+ *    A binomial coefficient (n choose k) is divisible by a prime p
+ *    iif at least one digit of base p representation of k is greater
+ *    than the corresponding digit of base p representation of n.
+ *
+ *    For p = 2, (n choose k) is even iif at least one digit of binary 
+ *    representation of k is 1 and the corresponding digit of binary
+ *    representation of n is 0.
+ */
+template <typename type>
+constexpr type binom_mod2(type n, type k) {
 
-  if (k > n) {
-    return 0;
-  } else if (k == 0 || n == 0) {
-    return 1;
-  } else if (k == 1 && n > 0) {
-    return n % modulo;
-  } else {
-    return (uint64_t(recursive_binomial(n - 1, k, modulo))
-            + uint64_t(recursive_binomial(n - 1, k - 1, modulo))) % modulo;
-  }
+  static_assert(std::is_unsigned<type>() & std::is_integral<type>(), 
+                "binom_mod2 supports only unsigned integral types.");
+
+  // among the digits which are different in n & k,
+  // check if any digits of k are one
+  return !(k & (n ^ k));
+
+}
+
+template <typename type>
+constexpr type mod_mul(uint64_t left, uint64_t right, type modulo) {
+
+  static_assert(std::is_unsigned<type>() & std::is_integral<type>(), 
+                "mod_mul supports only unsigned integral types.");
+
+  return (left * right) % modulo;
+
 }
 
 /** Modular exponentiation via squaring.
  */ 
-constexpr value_type mod_exp(
-  value_type value, 
-  value_type exponent,
-  value_type modulo
-) {
+template <typename type>
+constexpr type mod_exp(uint64_t value, uint64_t exponent, type modulo) {
 
-  auto result = value_type(1);
+  static_assert(std::is_unsigned<type>() & std::is_integral<type>(), 
+                "mod_exp supports only unsigned integral types.");
+
+  auto result = type(1);
+
   while (exponent) {
     if (exponent % 2) {
-      result = (uint64_t(value) * uint64_t(result)) % modulo;
+      result = mod_mul(value, result, modulo);
     }
-    value = (uint64_t(value) * uint64_t(value)) % modulo;
+    value = mod_mul(value, value, modulo);
     exponent /= 2;
   }
+
   return result;
+
+}
+
+template <typename type>
+constexpr type mod_inv(uint64_t value, type modulo) {
+
+  static_assert(std::is_unsigned<type>() & std::is_integral<type>(), 
+                "mod_inv supports only unsigned integral types.");
+
+  return mod_exp(value, modulo - 2, modulo);
+
 }
 
 /** Simple compile time lookup base template. 
@@ -88,30 +124,59 @@ class IsPrime : public Lookup<bool, n_max> {
   public:
     constexpr IsPrime() : Lookup<bool, n_max>() {
       for (auto i = value_type(1); i <= n_max; i++) {
-        Lookup<bool, n_max>::lookup[i] = is_prime(i);
+        Lookup<bool, n_max>::lookup[i] = IS_PRIME(i);
       }
     }
 };
 
 /** Lookup for the values 
- *  A_n = \prod_{k = 0} ^ m (k + 2) ^ {n \choose k}
+ *  A_n = \prod_{k = 0} ^ n (k + 2) ^ {n \choose k}
  *  modulo some integer.
+ *
+ *  Uses Euler's theorem to get the (n choose k) power of (k + 2).
  */ 
 template <value_type n_max>
 class Product : public Lookup<value_type, n_max> {
-    const value_type modulo;
-    const value_type totient;
+    static constexpr value_type modulo = 1000000007;
+
+    static_assert(IS_PRIME(modulo), "MODULO is not prime!");
+
+    static_assert((modulo & ~uint32_t(1 << 31)) == modulo, 
+                  "MODULO not 31 bit!");
+
   public:
-    constexpr Product(value_type imodulo, value_type itotient) 
-      : Lookup<value_type, n_max>(), modulo(imodulo), totient(itotient) 
-    {
+    constexpr Product() : Lookup<value_type, n_max>() {
+
+      value_type t = 1000 * 1000 * 1000 + 6;
+      value_type p = t / 2;
+
+      value_type factorial[n_max + 1] = {1, 1};
+      value_type inv_factorial[n_max + 1] = {1, 1};
+
+      value_type factorial_val = 1;
+
+      for (value_type i = 2; i <= n_max; i++) {
+        factorial_val = mod_mul(factorial_val, i, p);
+        factorial[i] = factorial_val;
+        inv_factorial[i] = mod_inv(factorial_val, p);
+      }
+
       Lookup<value_type, n_max>::lookup[0] = value_type(2);
       for (auto i = value_type(1); i <= n_max; i++) {
         auto value = value_type(2);
         for (auto j = value_type(1); j <= i; j++) {
-          auto k = j > (i - j) ? i - j : j;
-          auto q = mod_exp(2 + j, recursive_binomial(i, k, totient), modulo);
-          value = (uint64_t(value) * uint64_t(q)) % modulo;
+
+          auto bnm_p = mod_mul(factorial[i], inv_factorial[j], p);
+          bnm_p = mod_mul(bnm_p, inv_factorial[i - j], p);
+
+          auto bnm_2 = binom_mod2(i, j);
+
+          auto offset = t - mod_mul(500000002, bnm_p, t);
+
+          auto bnm = (offset + bnm_2 * 500000003) % t;
+
+          value = mod_mul(value, mod_exp(2 + j, bnm, modulo), modulo);
+
         }
         Lookup<value_type, n_max>::lookup[i] = value;
       }
@@ -126,8 +191,8 @@ class Formula {
     const value_type modulo;
     const Product<n_max> product;
   public:
-    constexpr Formula(value_type imodulo, value_type itotient)
-      : modulo(imodulo), product(imodulo, itotient) {}
+    /* constexpr */ Formula(value_type imodulo)
+      : modulo(imodulo), product() {}
 
     constexpr value_type operator()(value_type n, value_type m) const {
       if (n < 1) {
@@ -135,7 +200,7 @@ class Formula {
       }
       value_type value = product(m);
       for (auto i = value_type(0); i < n - m; i++) {
-        value = (uint64_t(value) * uint64_t(value)) % modulo;
+        value = mod_mul(value, value, modulo);
       }
       return value;
     }
@@ -156,7 +221,7 @@ class InputParser {
     }
 
   public:
-    constexpr InputParser() : is_prime() {}
+    /* constexpr */ InputParser() : is_prime() {}
     std::vector<value_type> operator()() const {
 
       // read stdin
@@ -202,6 +267,7 @@ class InputParser {
           }
           counter += is_prime(parse_int(ptr));
         }
+
         // push result
         out[i++] = numel;
         out[i++] = counter;
@@ -220,16 +286,11 @@ int main(int argc, char** argv) {
    *    TOTIENT - is equal n - 1, for any prime n
    */ 
   constexpr auto NMAX = value_type(1000);
-  constexpr auto MMAX = value_type(1000000);
-  constexpr auto MODULO = value_type(1000000007);
-  constexpr auto TOTIENT = value_type(1000000006);
+  constexpr auto MMAX = value_type(1000 * 1000);
+  constexpr auto MODULO = value_type(1000 * 1000 * 1000 + 7);
 
-  static_assert(is_prime(MODULO), "MODULO is not prime!");
-  static_assert((MODULO & ~uint32_t(1 << 31)) == MODULO, 
-                "MODULO not 31 bit!");
-
-  constexpr Formula<NMAX> formula(MODULO, TOTIENT);
-  constexpr InputParser<MMAX> parse_stdin;
+  /* constexpr */ Formula<NMAX> formula(MODULO);
+  /* constexpr */ InputParser<MMAX> parse_stdin;
 
   try {
     auto input = parse_stdin();
